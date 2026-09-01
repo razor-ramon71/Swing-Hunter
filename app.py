@@ -270,3 +270,46 @@ st.caption(
     "Swing Hunter V1 Prototype • Simulated data only • "
     "Not financial advice"
 )
+# -----------------------------
+# TRADIER CONNECTION TEST
+# -----------------------------
+
+import requests
+
+st.divider()
+st.header("📡 Live Market Data Connection")
+
+try:
+    token = st.secrets["TRADIER_SANDBOX_TOKEN"]
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json"
+    }
+
+    response = requests.get(
+        "https://sandbox.tradier.com/v1/markets/quotes",
+        params={"symbols": "AAPL"},
+        headers=headers,
+        timeout=10
+    )
+
+    if response.status_code == 200:
+        data = response.json()
+        quote = data["quotes"]["quote"]
+
+        st.success("🟢 Tradier connection successful!")
+
+        st.write(f"**Symbol:** {quote.get('symbol')}")
+        st.write(f"**Price:** ${quote.get('last')}")
+        st.write(f"**Volume:** {quote.get('volume')}")
+
+    else:
+        st.error(
+            f"🔴 Tradier returned error {response.status_code}"
+        )
+
+except Exception as e:
+    st.error(
+        "🔴 Tradier connection could not be completed."
+    )
