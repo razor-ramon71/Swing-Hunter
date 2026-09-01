@@ -703,8 +703,652 @@ st.caption(
     "No trades are placed • Not financial advice"
 )
 
-st.caption(
-    "Swing Hunter V2 • Tradier sandbox data • "
-    "Automated technical scoring • "
-    "No trades are placed • Not financial advice"
+# =========================================================
+# 🥇 GOLDEN SCANNER V3
+# =========================================================
+
+st.divider()
+st.header("🥇 Golden Scanner")
+
+st.write(
+    "Scans a starter universe of liquid stocks and ETFs "
+    "for 1–2 week swing candidates."
 )
+
+# ---------------------------------------------------------
+# STARTER UNIVERSE
+# ---------------------------------------------------------
+
+scanner_symbols = [
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "AMZN",
+    "META",
+    "GOOGL",
+    "TSLA",
+    "AMD",
+    "NFLX",
+    "PLTR",
+    "AVGO",
+    "QQQ",
+    "SPY",
+    "IWM",
+    "DIA"
+]
+
+scan_button = st.button(
+    "🔍 RUN GOLDEN SCAN"
+)
+
+if scan_button:
+
+    results = []
+
+    progress = st.progress(0)
+
+    status_text = st.empty()
+
+    for index, scan_symbol in enumerate(
+        scanner_symbols
+    ):
+
+        status_text.write(
+            f"Scanning {scan_symbol}..."
+        )
+
+        try:
+
+            scan_end = date.today()
+
+            scan_start = (
+                scan_end
+                - timedelta(days=450)
+            )
+
+            response = requests.get(
+                "https://sandbox.tradier.com/v1/markets/history",
+                params={
+                    "symbol": scan_symbol,
+                    "interval": "daily",
+                    "start":
+                        scan_start.isoformat(),
+                    "end":
+                        scan_end.isoformat()
+                },
+                headers=headers,
+                timeout=10
+            )
+
+            if response.status_code != 200:
+                continue
+
+            history_data = response.json()
+
+            scan_history = (
+                history_data
+                .get("history", {})
+                .get("day", [])
+            )
+
+            if not scan_history:
+                continue
+
+            sdf = pd.DataFrame(
+                scan_history
+            )
+
+            for column in [
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume"
+            ]:
+
+                sdf[column] = pd.to_numeric(
+                    sdf[column],
+                    errors="coerce"
+                )
+
+            sdf = (
+                sdf
+                .dropna()
+                .sort_values("date")
+                .reset_index(drop=True)
+            )
+
+            if len(sdf) < 200:
+                continue
+
+            close_s = sdf["close"]
+            high_s = sdf["high"]
+            low_s = sdf["low"]
+            volume_s = sdf["volume"]
+
+            # -------------------------------------------------
+            # MOVING AVERAGES
+            # -------------------------------------------------
+
+            ema20_s = close_s.ewm(
+                span=20,
+                adjust=False
+            ).mean()
+
+            ema50_s = close_s.ewm(
+                span=50,
+                adjust=False
+            ).mean()
+
+            ema200_s = close_s.ewm(
+                span=200,
+                adjust=False
+            ).mean()
+
+            # -------------------------------------------------
+            # RSI
+            # -------------------------------------------------
+
+            change_s = close_s.diff()
+
+            gain_s = change_s.clip(
+                lower=0
+            )
+
+            loss_s = -change_s.clip(
+                upper=0
+            )
+
+            avg_gain_s = gain_s.rolling(
+                14
+            ).mean()
+
+            avg_loss_s = loss_s.rolling(
+                14
+            ).mean()
+
+            rs_s = (
+                avg_gain_s
+                / avg_loss_s.replace(
+                    0,
+                    np.nan
+                )
+            )
+
+            rsi_s = (
+                100
+                - (
+                    100
+                    / (1 + rs_s)
+                )
+            )
+
+            # -------------------------------------------------
+            # MACD
+            # -------------------------------------------------
+
+            ema12_s = close_s.ewm(
+                span=12,
+                adjust=False
+            ).mean()
+
+            ema26_s = close_s.ewm(
+                span=26,
+                adjust=False
+            ).mean()
+
+            macd_s = (
+                ema12_s
+                - ema26_s
+            )
+
+            macd_signal_s = (
+                macd_s.ewm(
+                    span=9,
+                    adjust=False
+                ).mean()
+            )
+
+            # -------------------------------------------------
+            # VOLUME
+            # -------------------------------------------------
+
+            volume_avg_s = (
+                volume_s
+                .rolling(20)
+                .mean()
+            )
+
+            latest_s = sdf.iloc[-1]
+
+            current_price = float(
+                latest_s["close"]
+            )
+
+            current_ema20 = float(
+                ema20_s.iloc[-1]
+            )
+
+            current_ema50 = float(
+                ema50_s.iloc[-1]
+            )
+
+            current_ema200 = float(
+                ema200_s.iloc[-1]
+            )
+
+            current_rsi = float(
+                rsi_s.iloc[-1]
+            )
+
+            current_macd = float(
+                macd_s.iloc[-1]
+            )
+
+            current_signal = float(
+                macd_signal_s.iloc[-1]
+            )
+
+            current_volume = float(
+                latest_s["volume"]
+            )
+
+            average_volume = float(
+                volume_avg_s.iloc[-1]
+            )
+
+            volume_ratio_s = (
+                current_volume
+                / average_volume
+                if average_volume > 0
+                else 1
+            )
+
+            # -------------------------------------------------
+            # TREND SCORE
+            # -------------------------------------------------
+
+            if (
+                current_price > current_ema20
+                and current_ema20 > current_ema50
+                and current_ema50 > current_ema200
+            ):
+
+                trend = 100
+                trend_direction = "Bullish"
+
+            elif (
+                current_price < current_ema20
+                and current_ema20 < current_ema50
+                and current_ema50 < current_ema200
+            ):
+
+                trend = 100
+                trend_direction = "Bearish"
+
+            elif (
+                current_price > current_ema20
+                and current_ema20 > current_ema50
+            ):
+
+                trend = 85
+                trend_direction = "Bullish"
+
+            elif (
+                current_price < current_ema20
+                and current_ema20 < current_ema50
+            ):
+
+                trend = 85
+                trend_direction = "Bearish"
+
+            else:
+
+                trend = 50
+
+                if current_price >= current_ema50:
+                    trend_direction = "Bullish"
+                else:
+                    trend_direction = "Bearish"
+
+            # -------------------------------------------------
+            # MOMENTUM SCORE
+            # -------------------------------------------------
+
+            if (
+                current_rsi >= 55
+                and current_rsi <= 70
+                and current_macd > current_signal
+            ):
+
+                momentum = 100
+
+            elif (
+                current_rsi > 50
+                and current_macd > current_signal
+            ):
+
+                momentum = 85
+
+            elif (
+                current_rsi <= 45
+                and current_macd < current_signal
+            ):
+
+                momentum = 100
+
+            elif (
+                current_rsi < 50
+                and current_macd < current_signal
+            ):
+
+                momentum = 85
+
+            else:
+
+                momentum = 50
+
+            # -------------------------------------------------
+            # VOLUME SCORE
+            # -------------------------------------------------
+
+            if volume_ratio_s >= 1.5:
+
+                volume_score_s = 100
+
+            elif volume_ratio_s >= 1.2:
+
+                volume_score_s = 85
+
+            elif volume_ratio_s >= 1.0:
+
+                volume_score_s = 70
+
+            else:
+
+                volume_score_s = 45
+
+            # -------------------------------------------------
+            # STRUCTURE
+            # -------------------------------------------------
+
+            recent_s = sdf.tail(20)
+
+            older_s = sdf.iloc[-40:-20]
+
+            recent_high_s = (
+                recent_s["high"].max()
+            )
+
+            recent_low_s = (
+                recent_s["low"].min()
+            )
+
+            older_high_s = (
+                older_s["high"].max()
+            )
+
+            older_low_s = (
+                older_s["low"].min()
+            )
+
+            if (
+                trend_direction == "Bullish"
+                and recent_high_s > older_high_s
+                and recent_low_s > older_low_s
+            ):
+
+                structure = 100
+
+            elif (
+                trend_direction == "Bearish"
+                and recent_high_s < older_high_s
+                and recent_low_s < older_low_s
+            ):
+
+                structure = 100
+
+            else:
+
+                structure = 60
+
+            # -------------------------------------------------
+            # SUPPORT / RESISTANCE
+            # -------------------------------------------------
+
+            range_size = (
+                recent_high_s
+                - recent_low_s
+            )
+
+            if range_size > 0:
+
+                position_in_range = (
+                    current_price
+                    - recent_low_s
+                ) / range_size
+
+            else:
+
+                position_in_range = 0.5
+
+            if trend_direction == "Bullish":
+
+                if position_in_range <= 0.35:
+
+                    sr_score = 95
+                    setup = "Pullback"
+
+                elif position_in_range >= 0.85:
+
+                    sr_score = 70
+                    setup = "Breakout Watch"
+
+                else:
+
+                    sr_score = 80
+                    setup = "Continuation"
+
+            else:
+
+                if position_in_range >= 0.65:
+
+                    sr_score = 95
+                    setup = "Rally / Resistance"
+
+                elif position_in_range <= 0.15:
+
+                    sr_score = 70
+                    setup = "Breakdown Watch"
+
+                else:
+
+                    sr_score = 80
+                    setup = "Continuation"
+
+            # -------------------------------------------------
+            # HIGHER TIMEFRAME
+            # -------------------------------------------------
+
+            if (
+                trend_direction == "Bullish"
+                and current_price > current_ema200
+            ):
+
+                higher_tf = 90
+
+            elif (
+                trend_direction == "Bearish"
+                and current_price < current_ema200
+            ):
+
+                higher_tf = 90
+
+            else:
+
+                higher_tf = 55
+
+            # -------------------------------------------------
+            # FINAL SCORE
+            # -------------------------------------------------
+
+            final_score = (
+
+                trend * 0.20
+                + momentum * 0.20
+                + volume_score_s * 0.15
+                + structure * 0.15
+                + sr_score * 0.15
+                + higher_tf * 0.15
+            )
+
+            final_score = round(
+                final_score,
+                1
+            )
+
+            # -------------------------------------------------
+            # GRADE
+            # -------------------------------------------------
+
+            if final_score >= 90:
+                grade_s = "A+"
+
+            elif final_score >= 85:
+                grade_s = "A"
+
+            elif final_score >= 80:
+                grade_s = "B+"
+
+            elif final_score >= 75:
+                grade_s = "B"
+
+            else:
+                grade_s = "C"
+
+            # -------------------------------------------------
+            # OPTION DIRECTION
+            # -------------------------------------------------
+
+            if trend_direction == "Bullish":
+
+                option_type_s = "CALL"
+
+            else:
+
+                option_type_s = "PUT"
+
+            # -------------------------------------------------
+            # SAVE RESULT
+            # -------------------------------------------------
+
+            results.append({
+
+                "Rank Score":
+                    final_score,
+
+                "Symbol":
+                    scan_symbol,
+
+                "Setup":
+                    setup,
+
+                "Bias":
+                    trend_direction,
+
+                "Grade":
+                    grade_s,
+
+                "RSI":
+                    round(
+                        current_rsi,
+                        1
+                    ),
+
+                "Volume":
+                    f"{volume_ratio_s:.2f}x",
+
+                "Option":
+                    option_type_s
+            })
+
+        except Exception:
+            continue
+
+        progress.progress(
+            (index + 1)
+            / len(scanner_symbols)
+        )
+
+    status_text.empty()
+
+    progress.empty()
+
+    # ---------------------------------------------------------
+    # DISPLAY RESULTS
+    # ---------------------------------------------------------
+
+    if results:
+
+        results_df = pd.DataFrame(
+            results
+        )
+
+        results_df = (
+            results_df
+            .sort_values(
+                "Rank Score",
+                ascending=False
+            )
+            .reset_index(drop=True)
+        )
+
+        results_df.index += 1
+
+        results_df.index.name = "Rank"
+
+        st.success(
+            f"🟢 Scan complete — "
+            f"{len(results_df)} candidates found."
+        )
+
+        st.subheader(
+            "🏆 Golden Scanner Rankings"
+        )
+
+        st.dataframe(
+            results_df,
+            use_container_width=True
+        )
+
+        # -----------------------------------------------------
+        # BEST CANDIDATE
+        # -----------------------------------------------------
+
+        best = results_df.iloc[0]
+
+        st.subheader(
+            "🥇 Top Candidate"
+        )
+
+        st.success(
+            f"{best['Symbol']} — "
+            f"{best['Grade']} — "
+            f"{best['Rank Score']}/100 — "
+            f"{best['Bias']} — "
+            f"{best['Setup']} — "
+            f"{best['Option']}"
+        )
+
+    else:
+
+        st.warning(
+            "No usable candidates were returned."
+        )
+
+else:
+
+    st.info(
+        "Press 🔍 RUN GOLDEN SCAN to scan "
+        "the starter stock/ETF universe."
+    )
