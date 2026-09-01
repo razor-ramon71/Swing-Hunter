@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import requests
+from datetime import datetime, date
 
 st.set_page_config(
     page_title="Swing Hunter",
@@ -7,20 +9,22 @@ st.set_page_config(
     layout="wide"
 )
 
-# -----------------------------
-# SWING HUNTER V1 PROTOTYPE
-# -----------------------------
+# =========================================================
+# SWING HUNTER
+# =========================================================
 
 st.title("🦅 SWING HUNTER")
 st.subheader("1–2 Week Stock & Options Swing Scanner")
 
 st.info(
-    "PROTOTYPE MODE — The numbers shown are simulated. "
-    "This version is testing the scanner's logic and interface, "
-    "not providing live trading signals."
+    "LIVE DATA TEST MODE — Market and option data are being "
+    "retrieved from the Tradier sandbox. No trades are placed."
 )
 
-# Sidebar
+# =========================================================
+# SETTINGS
+# =========================================================
+
 st.sidebar.header("Scanner Settings")
 
 account_size = st.sidebar.selectbox(
@@ -39,245 +43,88 @@ mode = st.sidebar.selectbox(
     ["Balanced", "Conservative", "Aggressive"]
 )
 
-show_rule_fails = st.sidebar.checkbox(
-    "Show options that fail 1% rule",
-    True
-)
+symbol = st.sidebar.text_input(
+    "Test Symbol",
+    "AAPL"
+).upper().strip()
 
-# -----------------------------
-# SAMPLE CANDIDATES
-# -----------------------------
+# =========================================================
+# PROTOTYPE CANDIDATES
+# =========================================================
 
-data = [
-    ["NVDA", "🟢 Bullish", 94, "+7.2%", "Call", "10", "PASS", 91, "A+"],
-    ["AMD", "🟢 Bullish", 91, "+6.8%", "Call", "12", "PASS", 88, "A"],
-    ["PLTR", "🟢 Bullish", 87, "+5.9%", "Call", "14", "FAIL", 79, "B+"],
-    ["TSLA", "🔴 Bearish", 89, "-6.4%", "Put", "9", "FAIL", 82, "B+"],
-    ["QQQ", "🟢 Bullish", 86, "+4.7%", "Call", "10", "PASS", 85, "A-"],
-    ["META", "🔴 Bearish", 83, "-5.3%", "Put", "12", "FAIL", 76, "B"],
+prototype_data = [
+    ["NVDA", "🟢 Bullish", 94, "+7.2%", "A+"],
+    ["AMD", "🟢 Bullish", 91, "+6.8%", "A"],
+    ["PLTR", "🟢 Bullish", 87, "+5.9%", "B+"],
+    ["TSLA", "🔴 Bearish", 89, "-6.4%", "A-"],
+    ["QQQ", "🟢 Bullish", 86, "+4.7%", "A-"],
+    ["META", "🔴 Bearish", 83, "-5.3%", "B"]
 ]
 
-columns = [
+prototype_columns = [
     "Symbol",
     "Bias",
     "Swing Score",
     "Expected Move",
-    "Option",
-    "DTE",
-    "Hughes 1%",
-    "Option Score",
     "Grade"
 ]
 
-df = pd.DataFrame(data, columns=columns)
+prototype_df = pd.DataFrame(
+    prototype_data,
+    columns=prototype_columns
+)
 
-if not show_rule_fails:
-    df = df[df["Hughes 1%"] == "PASS"]
+# =========================================================
+# PROTOTYPE DASHBOARD
+# =========================================================
 
-# -----------------------------
-# SUMMARY
-# -----------------------------
+st.header("🔥 Prototype Opportunities")
 
-col1, col2, col3, col4 = st.columns(4)
+c1, c2, c3, c4 = st.columns(4)
 
-col1.metric(
+c1.metric(
     "Candidates",
-    len(df)
+    len(prototype_df)
 )
 
-col2.metric(
-    "A / A+ Setups",
-    len(df[df["Grade"].isin(["A+", "A", "A-"])])
+c2.metric(
+    "A / A+",
+    len(
+        prototype_df[
+            prototype_df["Grade"].isin(
+                ["A+", "A", "A-"]
+            )
+        ]
+    )
 )
 
-col3.metric(
-    "1% Rule PASS",
-    len(df[df["Hughes 1%"] == "PASS"])
+c3.metric(
+    "Mode",
+    mode
 )
 
-col4.metric(
+c4.metric(
     "Account",
     f"${account_size:,}"
 )
 
-# -----------------------------
-# RANKED OPPORTUNITIES
-# -----------------------------
-
-st.header("🔥 Top Swing Opportunities")
-
 st.dataframe(
-    df,
+    prototype_df,
     use_container_width=True,
     hide_index=True
 )
 
-# -----------------------------
-# DETAIL VIEW
-# -----------------------------
-
-st.header("🔎 Candidate Analysis")
-
-symbol = st.selectbox(
-    "Select a candidate",
-    df["Symbol"].tolist()
-)
-
-candidate = df[df["Symbol"] == symbol].iloc[0]
-
-left, right = st.columns(2)
-
-with left:
-
-    st.markdown(
-        f"## {candidate['Symbol']} {candidate['Bias']}"
-    )
-
-    st.metric(
-        "Swing Score",
-        f"{candidate['Swing Score']}/100"
-    )
-
-    st.metric(
-        "Expected Move",
-        candidate["Expected Move"]
-    )
-
-    st.write(
-        f"Expected holding period: **{horizon}**"
-    )
-
-with right:
-
-    st.markdown("## 🎯 Option Candidate")
-
-    st.write(
-        f"**{candidate['Option']}**"
-    )
-
-    st.write(
-        f"Expiration: **{candidate['DTE']} DTE**"
-    )
-
-    st.write(
-        f"Hughes 1% Rule: "
-        f"**{candidate['Hughes 1%']}**"
-    )
-
-    st.write(
-        f"Option Score: "
-        f"**{candidate['Option Score']}/100**"
-    )
-
-    st.write(
-        f"Overall Grade: **{candidate['Grade']}**"
-    )
-
-# -----------------------------
-# WHY THIS TRADE?
-# -----------------------------
-
-st.header("🧠 Why This Setup?")
-
-reasons = {
-    "Trend": "Confirmed",
-    "Momentum": "Strong",
-    "Market Structure": "Potential breakout/breakdown",
-    "Volume": "Above baseline",
-    "Compression": "Developing",
-    "Higher Timeframe": "Aligned"
-}
-
-for item, status in reasons.items():
-
-    st.write(
-        f"✅ **{item}:** {status}"
-    )
-
-# -----------------------------
-# HUGHES 1% EXAMPLE
-# -----------------------------
-
-st.header("🧮 Hughes 1% Rule")
-
-prototype_prices = {
-    "NVDA": 180,
-    "AMD": 150,
-    "PLTR": 148,
-    "TSLA": 325,
-    "QQQ": 595,
-    "META": 745
-}
-
-stock_price = prototype_prices.get(
-    symbol,
-    100
-)
-
-threshold = stock_price * 0.01
-
-st.write(
-    f"Prototype stock price: **${stock_price:.2f}**"
-)
-
-st.write(
-    f"Maximum preferred time value "
-    f"(1%): **${threshold:.2f}**"
-)
-
-if candidate["Hughes 1%"] == "PASS":
-
-    st.success(
-        "✅ PASS — The prototype option satisfies "
-        "the Hughes 1% requirement."
-    )
-
-else:
-
-    st.warning(
-        "⚠️ RULE FAIL — This option does not satisfy "
-        "the Hughes 1% requirement. It is shown only "
-        "because you selected the alternative-option setting."
-    )
-
-# -----------------------------
-# TRADE STATUS
-# -----------------------------
-
-st.header("🚦 Trade Status")
-
-if candidate["Swing Score"] >= 90:
-
-    st.success(
-        "🔥 READY — High-quality prototype setup. REVIEW before trading."
-    )
-
-elif candidate["Swing Score"] >= 85:
-
-    st.warning(
-        "🟠 WATCH — Setup developing."
-    )
-
-else:
-
-    st.info(
-        "🟡 WATCH — More confirmation required."
-    )
+# =========================================================
+# TRADIER CONNECTION
+# =========================================================
 
 st.divider()
+st.header("📡 Tradier Market Data Connection")
 
-st.caption(
-   # -----------------------------
-# SWING HUNTER OPTIONS ENGINE
-# 7–14 DTE + HUGHES 1% RULE
-# -----------------------------
-
-st.divider()
-st.header("🧮 Swing Hunter Options Engine")
-
-from datetime import datetime, date
+quote = None
 
 try:
+
     token = st.secrets["TRADIER_SANDBOX_TOKEN"]
 
     headers = {
@@ -285,90 +132,195 @@ try:
         "Accept": "application/json"
     }
 
-    # Current underlying price
-    stock_price = quote.get("last", None)
+    quote_response = requests.get(
+        "https://sandbox.tradier.com/v1/markets/quotes",
+        params={
+            "symbols": symbol,
+            "greeks": "false"
+        },
+        headers=headers,
+        timeout=10
+    )
 
-    if stock_price is None:
-        st.error("Could not determine the AAPL stock price.")
+    if quote_response.status_code == 200:
+
+        quote_data = quote_response.json()
+
+        quote = (
+            quote_data
+            .get("quotes", {})
+            .get("quote")
+        )
+
+        if isinstance(quote, list):
+            quote = quote[0]
+
+        if quote:
+
+            st.success(
+                "🟢 Tradier Market Data Connection Successful"
+            )
+
+            st.write(
+                f"**Symbol:** {quote.get('symbol')}"
+            )
+
+            st.write(
+                f"**Last Price:** "
+                f"${quote.get('last')}"
+            )
+
+            st.write(
+                f"**Volume:** "
+                f"{quote.get('volume')}"
+            )
+
+        else:
+
+            st.error(
+                "Tradier connected, but no quote was returned."
+            )
+
     else:
 
-        stock_price = float(stock_price)
+        st.error(
+            f"🔴 Tradier returned HTTP "
+            f"{quote_response.status_code}"
+        )
 
-        # --------------------------------
-        # GET AVAILABLE EXPIRATIONS
-        # --------------------------------
+        st.code(quote_response.text)
 
-        exp_response = requests.get(
+except Exception as e:
+
+    st.error(
+        "🔴 Tradier connection failed."
+    )
+
+    st.code(str(e))
+
+# =========================================================
+# OPTIONS ENGINE
+# =========================================================
+
+st.divider()
+st.header("🧮 Swing Hunter Options Engine")
+
+if quote:
+
+    try:
+
+        stock_price = float(
+            quote.get("last")
+        )
+
+        # -------------------------------------------------
+        # GET EXPIRATIONS
+        # -------------------------------------------------
+
+        expiration_response = requests.get(
             "https://sandbox.tradier.com/v1/markets/options/expirations",
             params={
-                "symbol": "AAPL",
+                "symbol": symbol,
                 "includeAllRoots": "true"
             },
             headers=headers,
             timeout=10
         )
 
-        if exp_response.status_code != 200:
+        if expiration_response.status_code != 200:
 
             st.error(
                 f"Expiration request failed: "
-                f"HTTP {exp_response.status_code}"
+                f"HTTP {expiration_response.status_code}"
             )
 
-            st.code(exp_response.text)
+            st.code(
+                expiration_response.text
+            )
 
         else:
 
-            exp_data = exp_response.json()
+            expiration_data = (
+                expiration_response.json()
+            )
 
-            dates = exp_data["expirations"]["date"]
+            expiration_dates = (
+                expiration_data
+                .get("expirations", {})
+                .get("date", [])
+            )
 
-            if isinstance(dates, str):
-                dates = [dates]
+            if isinstance(
+                expiration_dates,
+                str
+            ):
+
+                expiration_dates = [
+                    expiration_dates
+                ]
 
             today = date.today()
 
-            expiration_candidates = []
+            preferred = []
 
-            for d in dates:
+            for expiration in expiration_dates:
 
                 try:
-                    exp_date = datetime.strptime(
-                        d,
-                        "%Y-%m-%d"
-                    ).date()
 
-                    dte = (exp_date - today).days
+                    expiration_date = (
+                        datetime.strptime(
+                            expiration,
+                            "%Y-%m-%d"
+                        ).date()
+                    )
+
+                    dte = (
+                        expiration_date - today
+                    ).days
 
                     if 7 <= dte <= 14:
-                        expiration_candidates.append(
-                            (d, dte)
+
+                        preferred.append(
+                            (
+                                expiration,
+                                dte
+                            )
                         )
 
                 except Exception:
+
                     continue
 
-            # --------------------------------
-            # DISPLAY AVAILABLE 7–14 DTE
-            # --------------------------------
+            # -------------------------------------------------
+            # EXPIRATION SELECTION
+            # -------------------------------------------------
 
-            st.subheader("📅 Preferred Swing Expirations")
+            st.subheader(
+                "📅 Preferred Swing Expirations"
+            )
 
-            if not expiration_candidates:
+            if not preferred:
 
                 st.warning(
-                    "No expiration between 7 and 14 DTE "
-                    "was returned by Tradier."
+                    "No 7–14 DTE expiration was "
+                    "returned by Tradier."
                 )
 
             else:
 
-                expiration_candidates.sort(
-                    key=lambda x: abs(x[1] - 10)
+                # Prefer approximately 10 DTE
+                preferred.sort(
+                    key=lambda x: abs(
+                        x[1] - 10
+                    )
                 )
 
-                selected_expiration, selected_dte = (
-                    expiration_candidates[0]
+                selected_expiration = (
+                    preferred[0][0]
+                )
+
+                selected_dte = (
+                    preferred[0][1]
                 )
 
                 st.success(
@@ -381,19 +333,20 @@ try:
                     "Available preferred expirations: "
                     + ", ".join(
                         f"{d} ({dte} DTE)"
-                        for d, dte in expiration_candidates
+                        for d, dte in preferred
                     )
                 )
 
-                # --------------------------------
-                # GET OPTION CHAIN
-                # --------------------------------
+                # -------------------------------------------------
+                # OPTION CHAIN
+                # -------------------------------------------------
 
                 chain_response = requests.get(
                     "https://sandbox.tradier.com/v1/markets/options/chains",
                     params={
-                        "symbol": "AAPL",
-                        "expiration": selected_expiration,
+                        "symbol": symbol,
+                        "expiration":
+                            selected_expiration,
                         "greeks": "true"
                     },
                     headers=headers,
@@ -403,15 +356,19 @@ try:
                 if chain_response.status_code != 200:
 
                     st.error(
-                        f"Option chain request failed: "
+                        f"Option chain failed: "
                         f"HTTP {chain_response.status_code}"
                     )
 
-                    st.code(chain_response.text)
+                    st.code(
+                        chain_response.text
+                    )
 
                 else:
 
-                    chain_data = chain_response.json()
+                    chain_data = (
+                        chain_response.json()
+                    )
 
                     options = (
                         chain_data
@@ -419,64 +376,100 @@ try:
                         .get("option", [])
                     )
 
-                    if isinstance(options, dict):
-                        options = [options]
+                    if isinstance(
+                        options,
+                        dict
+                    ):
+
+                        options = [
+                            options
+                        ]
 
                     rows = []
 
-                    # Hughes 1% threshold
-                    one_percent_limit = stock_price * 0.01
+                    one_percent_limit = (
+                        stock_price * 0.01
+                    )
 
-                    for opt in options:
+                    for option in options:
 
-                        strike = opt.get("strike")
-                        bid = opt.get("bid")
-                        ask = opt.get("ask")
-                        option_type = opt.get("option_type")
+                        strike = option.get(
+                            "strike"
+                        )
+
+                        bid = option.get(
+                            "bid"
+                        )
+
+                        ask = option.get(
+                            "ask"
+                        )
+
+                        option_type = option.get(
+                            "option_type"
+                        )
 
                         if (
                             strike is None
                             or bid is None
                             or ask is None
                         ):
+
                             continue
 
                         try:
 
-                            strike = float(strike)
-                            bid = float(bid)
-                            ask = float(ask)
+                            strike = float(
+                                strike
+                            )
 
-                            mid = (bid + ask) / 2
+                            bid = float(
+                                bid
+                            )
+
+                            ask = float(
+                                ask
+                            )
+
+                            mid = (
+                                bid + ask
+                            ) / 2
 
                             # Intrinsic value
                             if option_type == "call":
 
                                 intrinsic = max(
-                                    stock_price - strike,
+                                    stock_price
+                                    - strike,
                                     0
                                 )
 
                             else:
 
                                 intrinsic = max(
-                                    strike - stock_price,
+                                    strike
+                                    - stock_price,
                                     0
                                 )
 
                             # Time value
                             time_value = max(
-                                mid - intrinsic,
+                                mid
+                                - intrinsic,
                                 0
                             )
 
-                            # Hughes 1% test
-                            rule = (
-                                "PASS"
-                                if time_value
+                            # Hughes 1% rule
+                            if (
+                                time_value
                                 < one_percent_limit
-                                else "FAIL"
-                            )
+                            ):
+
+                                rule = "PASS"
+
+                            else:
+
+                                rule = "FAIL"
 
                             rows.append({
 
@@ -493,7 +486,10 @@ try:
                                     ask,
 
                                 "Mid":
-                                    round(mid, 2),
+                                    round(
+                                        mid,
+                                        2
+                                    ),
 
                                 "Intrinsic":
                                     round(
@@ -518,16 +514,16 @@ try:
                             })
 
                         except Exception:
+
                             continue
 
                     if rows:
 
-                        option_df = pd.DataFrame(rows)
+                        option_df = pd.DataFrame(
+                            rows
+                        )
 
-                        # --------------------------------
-                        # FIND CONTRACTS CLOSEST TO ATM
-                        # --------------------------------
-
+                        # Closest strikes to current price
                         option_df["Distance"] = (
                             abs(
                                 option_df["Strike"]
@@ -537,8 +533,14 @@ try:
 
                         option_df = (
                             option_df
-                            .sort_values("Distance")
-                            .drop(columns=["Distance"])
+                            .sort_values(
+                                "Distance"
+                            )
+                            .drop(
+                                columns=[
+                                    "Distance"
+                                ]
+                            )
                             .head(30)
                         )
 
@@ -547,12 +549,13 @@ try:
                         )
 
                         st.write(
-                            f"Underlying: "
+                            f"Underlying "
+                            f"{symbol}: "
                             f"**${stock_price:.2f}**"
                         )
 
                         st.write(
-                            f"Hughes 1% maximum preferred "
+                            f"Hughes 1% maximum "
                             f"time value: "
                             f"**${one_percent_limit:.2f}**"
                         )
@@ -566,14 +569,41 @@ try:
                     else:
 
                         st.warning(
-                            "No usable option contracts "
-                            "were returned."
+                            "No usable option "
+                            "contracts returned."
                         )
 
-except Exception as e:
+    except Exception as e:
 
-    st.error(
-        "🔴 Swing Hunter options engine failed."
+        st.error(
+            "🔴 Options engine failed."
+        )
+
+        st.code(
+            str(e)
+        )
+
+else:
+
+    st.info(
+        "Waiting for a successful market-data "
+        "connection before running the options engine."
     )
 
-    st.code(str(e))
+# =========================================================
+# STATUS
+# =========================================================
+
+st.divider()
+
+st.header("🚦 Swing Hunter Status")
+
+st.success(
+    "🟢 Prototype online — "
+    "Tradier market-data connection active."
+)
+
+st.caption(
+    "Swing Hunter V1 • Sandbox data • "
+    "No trades are placed • Not financial advice"
+)
