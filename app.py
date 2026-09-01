@@ -2098,6 +2098,11 @@ if trade_results:
 
 else:
 
+    st.warning(
+        "No option contracts currently meet "
+        "the Golden Trade Engine requirements."
+    )
+
     st.info(
         "Press 🔍 RUN GOLDEN SCAN to scan "
         "the starter stock/ETF universe."
