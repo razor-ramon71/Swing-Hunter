@@ -321,3 +321,171 @@ except Exception as e:
     st.error("🔴 Tradier connection failed.")
 
     st.code(str(e))
+# -----------------------------
+# OPTIONS CHAIN + 1% RULE TEST
+# -----------------------------
+
+st.divider()
+st.header("🧮 Swing Hunter Options Engine")
+
+try:
+    token = st.secrets["TRADIER_SANDBOX_TOKEN"]
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json"
+    }
+
+    # Get AAPL option expirations
+    exp_response = requests.get(
+        "https://sandbox.tradier.com/v1/markets/options/expirations",
+        params={"symbol": "AAPL", "includeAllRoots": "true"},
+        headers=headers,
+        timeout=10
+    )
+
+    if exp_response.status_code != 200:
+        st.error(f"Expiration request failed: HTTP {exp_response.status_code}")
+        st.code(exp_response.text)
+
+    else:
+        exp_data = exp_response.json()
+        dates = exp_data["expirations"]["date"]
+
+        # Handle either a list of dates or a single date
+        if isinstance(dates, list):
+            expiration = dates[0]
+        else:
+            expiration = dates
+
+        st.write(f"**Testing expiration:** {expiration}")
+
+        # Get option chain
+        chain_response = requests.get(
+            "https://sandbox.tradier.com/v1/markets/options/chains",
+            params={
+                "symbol": "AAPL",
+                "expiration": expiration,
+                "greeks": "true"
+            },
+            headers=headers,
+            timeout=10
+        )
+
+        if chain_response.status_code != 200:
+            st.error(
+                f"Option chain request failed: "
+                f"HTTP {chain_response.status_code}"
+            )
+            st.code(chain_response.text)
+
+        else:
+            chain_data = chain_response.json()
+            options = chain_data["options"]["option"]
+
+            if isinstance(options, dict):
+                options = [options]
+
+            option_rows = []
+
+            # Use the quote already retrieved above when available
+            stock_price = quote.get("last", None)
+
+            if stock_price is not None:
+
+                for opt in options:
+
+                    strike = opt.get("strike")
+                    bid = opt.get("bid")
+                    ask = opt.get("ask")
+                    option_type = opt.get("option_type")
+
+                    if strike is None or bid is None or ask is None:
+                        continue
+
+                    mid = (float(bid) + float(ask)) / 2
+
+                    if option_type == "call":
+                        intrinsic = max(
+                            float(stock_price) - float(strike),
+                            0
+                        )
+                    else:
+                        intrinsic = max(
+                            float(strike) - float(stock_price),
+                            0
+                        )
+
+                    time_value = max(
+                        mid - intrinsic,
+                        0
+                    )
+
+                    one_percent_limit = (
+                        float(stock_price) * 0.01
+                    )
+
+                    rule = (
+                        "PASS"
+                        if time_value < one_percent_limit
+                        else "FAIL"
+                    )
+
+                    option_rows.append({
+                        "Type": option_type,
+                        "Strike": strike,
+                        "Bid": bid,
+                        "Ask": ask,
+                        "Mid": round(mid, 2),
+                        "Intrinsic": round(intrinsic, 2),
+                        "Time Value": round(time_value, 2),
+                        "1% Limit": round(one_percent_limit, 2),
+                        "Hughes 1%": rule
+                    })
+
+                option_df = pd.DataFrame(option_rows)
+
+                if not option_df.empty:
+
+                    # Show options closest to the stock price
+                    option_df["Distance"] = (
+                        abs(option_df["Strike"].astype(float)
+                            - float(stock_price))
+                    )
+
+                    option_df = (
+                        option_df
+                        .sort_values("Distance")
+                        .drop(columns=["Distance"])
+                        .head(20)
+                    )
+
+                    st.success(
+                        "🟢 Live option-chain data received!"
+                    )
+
+                    st.write(
+                        f"Underlying AAPL price: "
+                        f"**${float(stock_price):.2f}**"
+                    )
+
+                    st.write(
+                        f"Hughes 1% maximum preferred time value: "
+                        f"**${one_percent_limit:.2f}**"
+                    )
+
+                    st.dataframe(
+                        option_df,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+                else:
+                    st.warning(
+                        "No usable option contracts were returned."
+                    )
+
+except Exception as e:
+
+    st.error("🔴 Options engine test failed.")
+    st.code(str(e))
