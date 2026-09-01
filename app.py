@@ -2104,7 +2104,7 @@ else:
     )
     
 
-    else:
+else:
 
         st.warning(
             "No usable candidates were returned."
