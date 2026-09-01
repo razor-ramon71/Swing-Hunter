@@ -1339,6 +1339,770 @@ if scan_button:
             f"{best['Setup']} — "
             f"{best['Option']}"
         )
+        # =========================================================
+# 🏆 GOLDEN TRADE ENGINE
+# =========================================================
+
+st.divider()
+st.header("🏆 Golden Trade Engine")
+
+st.write(
+    "The highest-ranked scanner candidates are now "
+    "evaluated for 7–14 DTE options."
+)
+
+# ---------------------------------------------------------
+# TRADE ENGINE SETTINGS
+# ---------------------------------------------------------
+
+max_risk_pct = st.slider(
+    "Maximum account risk per trade (%)",
+    1.0,
+    5.0,
+    2.0,
+    0.5
+)
+
+max_risk_dollars = (
+    account_size * max_risk_pct / 100
+)
+
+st.caption(
+    f"Account: ${account_size:,.0f} | "
+    f"Maximum planned risk: "
+    f"${max_risk_dollars:,.2f}"
+)
+
+# ---------------------------------------------------------
+# TOP CANDIDATES
+# ---------------------------------------------------------
+
+top_candidates = results_df.head(5)
+
+trade_results = []
+
+for _, candidate in top_candidates.iterrows():
+
+    trade_symbol = candidate["Symbol"]
+
+    try:
+
+        # -------------------------------------------------
+        # GET CURRENT QUOTE
+        # -------------------------------------------------
+
+        quote_response = requests.get(
+            "https://sandbox.tradier.com/v1/markets/quotes",
+            params={
+                "symbols": trade_symbol,
+                "greeks": "false"
+            },
+            headers=headers,
+            timeout=10
+        )
+
+        if quote_response.status_code != 200:
+            continue
+
+        quote_json = quote_response.json()
+
+        trade_quote = (
+            quote_json
+            .get("quotes", {})
+            .get("quote")
+        )
+
+        if isinstance(trade_quote, list):
+            trade_quote = trade_quote[0]
+
+        if not trade_quote:
+            continue
+
+        trade_price = float(
+            trade_quote.get("last")
+        )
+
+        # -------------------------------------------------
+        # EXPIRATIONS
+        # -------------------------------------------------
+
+        expiration_response = requests.get(
+            "https://sandbox.tradier.com/v1/markets/options/expirations",
+            params={
+                "symbol": trade_symbol,
+                "includeAllRoots": "true"
+            },
+            headers=headers,
+            timeout=10
+        )
+
+        if expiration_response.status_code != 200:
+            continue
+
+        expiration_json = (
+            expiration_response.json()
+        )
+
+        expiration_list = (
+            expiration_json
+            .get("expirations", {})
+            .get("date", [])
+        )
+
+        if isinstance(
+            expiration_list,
+            str
+        ):
+            expiration_list = [
+                expiration_list
+            ]
+
+        today_trade = date.today()
+
+        preferred_expirations = []
+
+        for exp in expiration_list:
+
+            try:
+
+                exp_date = datetime.strptime(
+                    exp,
+                    "%Y-%m-%d"
+                ).date()
+
+                dte = (
+                    exp_date
+                    - today_trade
+                ).days
+
+                if 7 <= dte <= 14:
+
+                    preferred_expirations.append(
+                        (
+                            exp,
+                            dte
+                        )
+                    )
+
+            except Exception:
+                continue
+
+        if not preferred_expirations:
+            continue
+
+        # Choose expiration closest to 10 DTE
+        preferred_expirations.sort(
+            key=lambda x: abs(
+                x[1] - 10
+            )
+        )
+
+        selected_expiration = (
+            preferred_expirations[0][0]
+        )
+
+        selected_dte = (
+            preferred_expirations[0][1]
+        )
+
+        # -------------------------------------------------
+        # OPTION CHAIN
+        # -------------------------------------------------
+
+        chain_response = requests.get(
+            "https://sandbox.tradier.com/v1/markets/options/chains",
+            params={
+                "symbol": trade_symbol,
+                "expiration":
+                    selected_expiration,
+                "greeks": "true"
+            },
+            headers=headers,
+            timeout=10
+        )
+
+        if chain_response.status_code != 200:
+            continue
+
+        chain_json = (
+            chain_response.json()
+        )
+
+        option_list = (
+            chain_json
+            .get("options", {})
+            .get("option", [])
+        )
+
+        if isinstance(
+            option_list,
+            dict
+        ):
+            option_list = [
+                option_list
+            ]
+
+        # -------------------------------------------------
+        # DETERMINE CALL / PUT
+        # -------------------------------------------------
+
+        if candidate["Bias"] == "Bullish":
+            desired_type = "call"
+        else:
+            desired_type = "put"
+
+        option_candidates = []
+
+        # -------------------------------------------------
+        # EVALUATE OPTIONS
+        # -------------------------------------------------
+
+        for option in option_list:
+
+            if option.get(
+                "option_type"
+            ) != desired_type:
+                continue
+
+            strike = option.get(
+                "strike"
+            )
+
+            bid = option.get(
+                "bid"
+            )
+
+            ask = option.get(
+                "ask"
+            )
+
+            volume_option = option.get(
+                "volume",
+                0
+            )
+
+            open_interest = option.get(
+                "open_interest",
+                0
+            )
+
+            greeks = option.get(
+                "greeks",
+                {}
+            )
+
+            if not isinstance(
+                greeks,
+                dict
+            ):
+                greeks = {}
+
+            delta = greeks.get(
+                "delta"
+            )
+
+            if (
+                strike is None
+                or bid is None
+                or ask is None
+            ):
+                continue
+
+            try:
+
+                strike = float(strike)
+                bid = float(bid)
+                ask = float(ask)
+
+                if bid < 0 or ask <= 0:
+                    continue
+
+                mid = (
+                    bid + ask
+                ) / 2
+
+                spread = (
+                    ask - bid
+                )
+
+                spread_pct = (
+                    spread / mid * 100
+                    if mid > 0
+                    else 999
+                )
+
+                # -----------------------------------------
+                # INTRINSIC VALUE
+                # -----------------------------------------
+
+                if desired_type == "call":
+
+                    intrinsic = max(
+                        trade_price
+                        - strike,
+                        0
+                    )
+
+                else:
+
+                    intrinsic = max(
+                        strike
+                        - trade_price,
+                        0
+                    )
+
+                # -----------------------------------------
+                # TIME VALUE
+                # -----------------------------------------
+
+                time_value = max(
+                    mid - intrinsic,
+                    0
+                )
+
+                # -----------------------------------------
+                # HUGHES 1% TEST
+                # -----------------------------------------
+
+                one_percent_limit = (
+                    trade_price * 0.01
+                )
+
+                if (
+                    time_value
+                    <= one_percent_limit
+                ):
+
+                    hughes_pass = True
+
+                else:
+
+                    hughes_pass = False
+
+                # -----------------------------------------
+                # DELTA
+                # -----------------------------------------
+
+                if delta is not None:
+
+                    delta = float(delta)
+
+                else:
+
+                    delta = np.nan
+
+                abs_delta = (
+                    abs(delta)
+                    if not np.isnan(delta)
+                    else 0
+                )
+
+                # -----------------------------------------
+                # LIQUIDITY
+                # -----------------------------------------
+
+                try:
+                    option_volume = float(
+                        volume_option
+                    )
+                except Exception:
+                    option_volume = 0
+
+                try:
+                    option_oi = float(
+                        open_interest
+                    )
+                except Exception:
+                    option_oi = 0
+
+                if (
+                    spread_pct <= 10
+                    and (
+                        option_volume >= 10
+                        or option_oi >= 50
+                    )
+                ):
+
+                    liquidity_score = 100
+
+                elif spread_pct <= 15:
+
+                    liquidity_score = 75
+
+                else:
+
+                    liquidity_score = 40
+
+                # -----------------------------------------
+                # DELTA SCORE
+                # -----------------------------------------
+
+                if 0.35 <= abs_delta <= 0.60:
+
+                    delta_score = 100
+
+                elif 0.25 <= abs_delta <= 0.70:
+
+                    delta_score = 80
+
+                elif abs_delta > 0:
+
+                    delta_score = 60
+
+                else:
+
+                    delta_score = 40
+
+                # -----------------------------------------
+                # HUGHES SCORE
+                # -----------------------------------------
+
+                if hughes_pass:
+
+                    rule_score = 100
+
+                else:
+
+                    rule_score = 25
+
+                # -----------------------------------------
+                # AFFORDABILITY
+                # -----------------------------------------
+
+                contract_cost = (
+                    mid * 100
+                )
+
+                if (
+                    contract_cost
+                    <= max_risk_dollars
+                ):
+
+                    affordability_score = 100
+
+                else:
+
+                    affordability_score = 25
+
+                # -----------------------------------------
+                # APPROXIMATE 1-ATR TARGET
+                # -----------------------------------------
+
+                if desired_type == "call":
+
+                    target_price = (
+                        trade_price
+                        + (
+                            atr
+                            if "atr" in locals()
+                            else trade_price * 0.03
+                        )
+                    )
+
+                    target_intrinsic = max(
+                        target_price
+                        - strike,
+                        0
+                    )
+
+                else:
+
+                    target_price = (
+                        trade_price
+                        - (
+                            atr
+                            if "atr" in locals()
+                            else trade_price * 0.03
+                        )
+                    )
+
+                    target_intrinsic = max(
+                        strike
+                        - target_price,
+                        0
+                    )
+
+                estimated_profit_per_contract = (
+                    max(
+                        target_intrinsic
+                        - mid,
+                        0
+                    ) * 100
+                )
+
+                estimated_risk = (
+                    contract_cost
+                )
+
+                if estimated_risk > 0:
+
+                    estimated_rr = (
+                        estimated_profit_per_contract
+                        / estimated_risk
+                    )
+
+                else:
+
+                    estimated_rr = 0
+
+                # -----------------------------------------
+                # RISK / REWARD SCORE
+                # -----------------------------------------
+
+                if estimated_rr >= 3:
+
+                    rr_score = 100
+
+                elif estimated_rr >= 2:
+
+                    rr_score = 85
+
+                elif estimated_rr >= 1.5:
+
+                    rr_score = 70
+
+                elif estimated_rr >= 1:
+
+                    rr_score = 50
+
+                else:
+
+                    rr_score = 25
+
+                # -----------------------------------------
+                # FINAL OPTION SCORE
+                # -----------------------------------------
+
+                option_score = (
+
+                    candidate["Rank Score"] * 0.30
+
+                    + rule_score * 0.20
+
+                    + delta_score * 0.15
+
+                    + liquidity_score * 0.15
+
+                    + rr_score * 0.10
+
+                    + affordability_score * 0.10
+                )
+
+                option_score = round(
+                    option_score,
+                    1
+                )
+
+                # -----------------------------------------
+                # TRADE STATUS
+                # -----------------------------------------
+
+                if (
+                    option_score >= 90
+                    and hughes_pass
+                    and contract_cost
+                    <= max_risk_dollars
+                    and estimated_rr >= 2
+                ):
+
+                    trade_status = "🟢 READY TO REVIEW"
+
+                elif option_score >= 80:
+
+                    trade_status = "🟡 WATCH"
+
+                else:
+
+                    trade_status = "🔴 NO TRADE"
+
+                option_candidates.append({
+
+                    "Symbol":
+                        trade_symbol,
+
+                    "Stock Score":
+                        candidate["Rank Score"],
+
+                    "Setup":
+                        candidate["Setup"],
+
+                    "Bias":
+                        candidate["Bias"],
+
+                    "Option":
+                        desired_type.upper(),
+
+                    "DTE":
+                        selected_dte,
+
+                    "Strike":
+                        strike,
+
+                    "Bid":
+                        bid,
+
+                    "Ask":
+                        ask,
+
+                    "Mid":
+                        round(
+                            mid,
+                            2
+                        ),
+
+                    "Delta":
+                        round(
+                            delta,
+                            3
+                        )
+                        if not np.isnan(delta)
+                        else "N/A",
+
+                    "Time Value":
+                        round(
+                            time_value,
+                            2
+                        ),
+
+                    "1% Limit":
+                        round(
+                            one_percent_limit,
+                            2
+                        ),
+
+                    "Hughes 1%":
+                        "✅ PASS"
+                        if hughes_pass
+                        else "❌ FAIL",
+
+                    "Spread %":
+                        round(
+                            spread_pct,
+                            1
+                        ),
+
+                    "R/R":
+                        round(
+                            estimated_rr,
+                            2
+                        ),
+
+                    "Option Score":
+                        option_score,
+
+                    "Status":
+                        trade_status
+                })
+
+            except Exception:
+                continue
+
+        # -------------------------------------------------
+        # KEEP BEST OPTION FOR THIS STOCK
+        # -------------------------------------------------
+
+        if option_candidates:
+
+            best_option = max(
+                option_candidates,
+                key=lambda x:
+                    x["Option Score"]
+            )
+
+            trade_results.append(
+                best_option
+            )
+
+    except Exception:
+        continue
+
+# =========================================================
+# DISPLAY GOLDEN TRADES
+# =========================================================
+
+if trade_results:
+
+    trade_df = pd.DataFrame(
+        trade_results
+    )
+
+    trade_df = (
+        trade_df
+        .sort_values(
+            "Option Score",
+            ascending=False
+        )
+        .reset_index(drop=True)
+    )
+
+    trade_df.index += 1
+    trade_df.index.name = "Rank"
+
+    st.subheader(
+        "🥇 Golden Trade Rankings"
+    )
+
+    st.dataframe(
+        trade_df,
+        use_container_width=True
+    )
+
+    # -----------------------------------------------------
+    # TOP TRADE
+    # -----------------------------------------------------
+
+    golden_trade = trade_df.iloc[0]
+
+    st.subheader(
+        "🏆 #1 Golden Trade Candidate"
+    )
+
+    st.success(
+        f"{golden_trade['Symbol']} | "
+        f"{golden_trade['Bias']} | "
+        f"{golden_trade['Option']} | "
+        f"${golden_trade['Strike']:.2f} strike | "
+        f"{golden_trade['DTE']} DTE | "
+        f"Option Score "
+        f"{golden_trade['Option Score']}/100"
+    )
+
+    g1, g2, g3, g4 = st.columns(4)
+
+    g1.metric(
+        "Stock Score",
+        golden_trade["Stock Score"]
+    )
+
+    g2.metric(
+        "Option Score",
+        golden_trade["Option Score"]
+    )
+
+    g3.metric(
+        "Risk / Reward",
+        f"{golden_trade['R/R']}:1"
+    )
+
+    g4.metric(
+        "Hughes 1%",
+        golden_trade["Hughes 1%"]
+    )
+
+    st.info(
+        "⚠️ This is a research prototype. "
+        "Option pricing, Greeks, fills, slippage, "
+        "and future price movement are uncertain. "
+        "Paper-test before risking real money."
+    )
+
+else:
+
+    st.warning(
+        "No option contracts currently meet "
+        "the Golden Trade Engine requirements."
+    )
+    
 
     else:
 
