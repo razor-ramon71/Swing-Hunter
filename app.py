@@ -267,67 +267,16 @@ else:
 st.divider()
 
 st.caption(
-    "Swing Hunter V1 Prototype • Simulated data only • "
-    "Not financial advice"
-)
-# -----------------------------
-# TRADIER CONNECTION TEST
-# -----------------------------
-
-import requests
-
-st.divider()
-st.header("📡 Tradier Market Data Connection")
-
-try:
-    token = st.secrets["TRADIER_SANDBOX_TOKEN"]
-
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json"
-    }
-
-    response = requests.get(
-        "https://sandbox.tradier.com/v1/markets/quotes",
-        params={
-            "symbols": "AAPL",
-            "greeks": "false"
-        },
-        headers=headers,
-        timeout=10
-    )
-
-    if response.status_code == 200:
-
-        data = response.json()
-        quote = data["quotes"]["quote"]
-
-        st.success("🟢 Tradier connection successful!")
-
-        st.write(f"**Symbol:** {quote.get('symbol')}")
-        st.write(f"**Last Price:** ${quote.get('last')}")
-        st.write(f"**Volume:** {quote.get('volume')}")
-
-    else:
-
-        st.error(
-            f"🔴 Tradier returned HTTP {response.status_code}"
-        )
-
-        st.code(response.text)
-
-except Exception as e:
-
-    st.error("🔴 Tradier connection failed.")
-
-    st.code(str(e))
-# -----------------------------
-# OPTIONS CHAIN + 1% RULE TEST
+   # -----------------------------
+# SWING HUNTER OPTIONS ENGINE
+# 7–14 DTE + HUGHES 1% RULE
 # -----------------------------
 
 st.divider()
 st.header("🧮 Swing Hunter Options Engine")
 
+from datetime import datetime, date
+
 try:
     token = st.secrets["TRADIER_SANDBOX_TOKEN"]
 
@@ -336,156 +285,295 @@ try:
         "Accept": "application/json"
     }
 
-    # Get AAPL option expirations
-    exp_response = requests.get(
-        "https://sandbox.tradier.com/v1/markets/options/expirations",
-        params={"symbol": "AAPL", "includeAllRoots": "true"},
-        headers=headers,
-        timeout=10
-    )
+    # Current underlying price
+    stock_price = quote.get("last", None)
 
-    if exp_response.status_code != 200:
-        st.error(f"Expiration request failed: HTTP {exp_response.status_code}")
-        st.code(exp_response.text)
-
+    if stock_price is None:
+        st.error("Could not determine the AAPL stock price.")
     else:
-        exp_data = exp_response.json()
-        dates = exp_data["expirations"]["date"]
 
-        # Handle either a list of dates or a single date
-        if isinstance(dates, list):
-            expiration = dates[0]
-        else:
-            expiration = dates
+        stock_price = float(stock_price)
 
-        st.write(f"**Testing expiration:** {expiration}")
+        # --------------------------------
+        # GET AVAILABLE EXPIRATIONS
+        # --------------------------------
 
-        # Get option chain
-        chain_response = requests.get(
-            "https://sandbox.tradier.com/v1/markets/options/chains",
+        exp_response = requests.get(
+            "https://sandbox.tradier.com/v1/markets/options/expirations",
             params={
                 "symbol": "AAPL",
-                "expiration": expiration,
-                "greeks": "true"
+                "includeAllRoots": "true"
             },
             headers=headers,
             timeout=10
         )
 
-        if chain_response.status_code != 200:
+        if exp_response.status_code != 200:
+
             st.error(
-                f"Option chain request failed: "
-                f"HTTP {chain_response.status_code}"
+                f"Expiration request failed: "
+                f"HTTP {exp_response.status_code}"
             )
-            st.code(chain_response.text)
+
+            st.code(exp_response.text)
 
         else:
-            chain_data = chain_response.json()
-            options = chain_data["options"]["option"]
 
-            if isinstance(options, dict):
-                options = [options]
+            exp_data = exp_response.json()
 
-            option_rows = []
+            dates = exp_data["expirations"]["date"]
 
-            # Use the quote already retrieved above when available
-            stock_price = quote.get("last", None)
+            if isinstance(dates, str):
+                dates = [dates]
 
-            if stock_price is not None:
+            today = date.today()
 
-                for opt in options:
+            expiration_candidates = []
 
-                    strike = opt.get("strike")
-                    bid = opt.get("bid")
-                    ask = opt.get("ask")
-                    option_type = opt.get("option_type")
+            for d in dates:
 
-                    if strike is None or bid is None or ask is None:
-                        continue
+                try:
+                    exp_date = datetime.strptime(
+                        d,
+                        "%Y-%m-%d"
+                    ).date()
 
-                    mid = (float(bid) + float(ask)) / 2
+                    dte = (exp_date - today).days
 
-                    if option_type == "call":
-                        intrinsic = max(
-                            float(stock_price) - float(strike),
-                            0
-                        )
-                    else:
-                        intrinsic = max(
-                            float(strike) - float(stock_price),
-                            0
+                    if 7 <= dte <= 14:
+                        expiration_candidates.append(
+                            (d, dte)
                         )
 
-                    time_value = max(
-                        mid - intrinsic,
-                        0
+                except Exception:
+                    continue
+
+            # --------------------------------
+            # DISPLAY AVAILABLE 7–14 DTE
+            # --------------------------------
+
+            st.subheader("📅 Preferred Swing Expirations")
+
+            if not expiration_candidates:
+
+                st.warning(
+                    "No expiration between 7 and 14 DTE "
+                    "was returned by Tradier."
+                )
+
+            else:
+
+                expiration_candidates.sort(
+                    key=lambda x: abs(x[1] - 10)
+                )
+
+                selected_expiration, selected_dte = (
+                    expiration_candidates[0]
+                )
+
+                st.success(
+                    f"🟢 Selected expiration: "
+                    f"{selected_expiration} "
+                    f"({selected_dte} DTE)"
+                )
+
+                st.write(
+                    "Available preferred expirations: "
+                    + ", ".join(
+                        f"{d} ({dte} DTE)"
+                        for d, dte in expiration_candidates
+                    )
+                )
+
+                # --------------------------------
+                # GET OPTION CHAIN
+                # --------------------------------
+
+                chain_response = requests.get(
+                    "https://sandbox.tradier.com/v1/markets/options/chains",
+                    params={
+                        "symbol": "AAPL",
+                        "expiration": selected_expiration,
+                        "greeks": "true"
+                    },
+                    headers=headers,
+                    timeout=10
+                )
+
+                if chain_response.status_code != 200:
+
+                    st.error(
+                        f"Option chain request failed: "
+                        f"HTTP {chain_response.status_code}"
                     )
 
-                    one_percent_limit = (
-                        float(stock_price) * 0.01
-                    )
-
-                    rule = (
-                        "PASS"
-                        if time_value < one_percent_limit
-                        else "FAIL"
-                    )
-
-                    option_rows.append({
-                        "Type": option_type,
-                        "Strike": strike,
-                        "Bid": bid,
-                        "Ask": ask,
-                        "Mid": round(mid, 2),
-                        "Intrinsic": round(intrinsic, 2),
-                        "Time Value": round(time_value, 2),
-                        "1% Limit": round(one_percent_limit, 2),
-                        "Hughes 1%": rule
-                    })
-
-                option_df = pd.DataFrame(option_rows)
-
-                if not option_df.empty:
-
-                    # Show options closest to the stock price
-                    option_df["Distance"] = (
-                        abs(option_df["Strike"].astype(float)
-                            - float(stock_price))
-                    )
-
-                    option_df = (
-                        option_df
-                        .sort_values("Distance")
-                        .drop(columns=["Distance"])
-                        .head(20)
-                    )
-
-                    st.success(
-                        "🟢 Live option-chain data received!"
-                    )
-
-                    st.write(
-                        f"Underlying AAPL price: "
-                        f"**${float(stock_price):.2f}**"
-                    )
-
-                    st.write(
-                        f"Hughes 1% maximum preferred time value: "
-                        f"**${one_percent_limit:.2f}**"
-                    )
-
-                    st.dataframe(
-                        option_df,
-                        use_container_width=True,
-                        hide_index=True
-                    )
+                    st.code(chain_response.text)
 
                 else:
-                    st.warning(
-                        "No usable option contracts were returned."
+
+                    chain_data = chain_response.json()
+
+                    options = (
+                        chain_data
+                        .get("options", {})
+                        .get("option", [])
                     )
+
+                    if isinstance(options, dict):
+                        options = [options]
+
+                    rows = []
+
+                    # Hughes 1% threshold
+                    one_percent_limit = stock_price * 0.01
+
+                    for opt in options:
+
+                        strike = opt.get("strike")
+                        bid = opt.get("bid")
+                        ask = opt.get("ask")
+                        option_type = opt.get("option_type")
+
+                        if (
+                            strike is None
+                            or bid is None
+                            or ask is None
+                        ):
+                            continue
+
+                        try:
+
+                            strike = float(strike)
+                            bid = float(bid)
+                            ask = float(ask)
+
+                            mid = (bid + ask) / 2
+
+                            # Intrinsic value
+                            if option_type == "call":
+
+                                intrinsic = max(
+                                    stock_price - strike,
+                                    0
+                                )
+
+                            else:
+
+                                intrinsic = max(
+                                    strike - stock_price,
+                                    0
+                                )
+
+                            # Time value
+                            time_value = max(
+                                mid - intrinsic,
+                                0
+                            )
+
+                            # Hughes 1% test
+                            rule = (
+                                "PASS"
+                                if time_value
+                                < one_percent_limit
+                                else "FAIL"
+                            )
+
+                            rows.append({
+
+                                "Type":
+                                    option_type,
+
+                                "Strike":
+                                    strike,
+
+                                "Bid":
+                                    bid,
+
+                                "Ask":
+                                    ask,
+
+                                "Mid":
+                                    round(mid, 2),
+
+                                "Intrinsic":
+                                    round(
+                                        intrinsic,
+                                        2
+                                    ),
+
+                                "Time Value":
+                                    round(
+                                        time_value,
+                                        2
+                                    ),
+
+                                "1% Limit":
+                                    round(
+                                        one_percent_limit,
+                                        2
+                                    ),
+
+                                "Hughes 1%":
+                                    rule
+                            })
+
+                        except Exception:
+                            continue
+
+                    if rows:
+
+                        option_df = pd.DataFrame(rows)
+
+                        # --------------------------------
+                        # FIND CONTRACTS CLOSEST TO ATM
+                        # --------------------------------
+
+                        option_df["Distance"] = (
+                            abs(
+                                option_df["Strike"]
+                                - stock_price
+                            )
+                        )
+
+                        option_df = (
+                            option_df
+                            .sort_values("Distance")
+                            .drop(columns=["Distance"])
+                            .head(30)
+                        )
+
+                        st.subheader(
+                            "🎯 7–14 DTE Option Candidates"
+                        )
+
+                        st.write(
+                            f"Underlying: "
+                            f"**${stock_price:.2f}**"
+                        )
+
+                        st.write(
+                            f"Hughes 1% maximum preferred "
+                            f"time value: "
+                            f"**${one_percent_limit:.2f}**"
+                        )
+
+                        st.dataframe(
+                            option_df,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+
+                    else:
+
+                        st.warning(
+                            "No usable option contracts "
+                            "were returned."
+                        )
 
 except Exception as e:
 
-    st.error("🔴 Options engine test failed.")
+    st.error(
+        "🔴 Swing Hunter options engine failed."
+    )
+
     st.code(str(e))
