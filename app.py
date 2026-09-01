@@ -607,3 +607,212 @@ st.caption(
     "Swing Hunter V1 • Sandbox data • "
     "No trades are placed • Not financial advice"
 )
+
+# =========================================================
+# SWING HUNTER STOCK SCORING ENGINE
+# =========================================================
+
+st.divider()
+st.header("🧠 Swing Hunter Stock Score")
+
+st.write(
+    "Initial technical scoring model for 1–2 week swing setups."
+)
+
+# ---------------------------------------------------------
+# Technical inputs
+# ---------------------------------------------------------
+
+trend_score = st.slider(
+    "Trend",
+    0,
+    100,
+    70
+)
+
+momentum_score = st.slider(
+    "Momentum",
+    0,
+    100,
+    70
+)
+
+volume_score = st.slider(
+    "Volume Confirmation",
+    0,
+    100,
+    60
+)
+
+structure_score = st.slider(
+    "Market Structure",
+    0,
+    100,
+    70
+)
+
+support_score = st.slider(
+    "Support / Resistance",
+    0,
+    100,
+    65
+)
+
+higher_tf_score = st.slider(
+    "Higher-Timeframe Confirmation",
+    0,
+    100,
+    70
+)
+
+# ---------------------------------------------------------
+# Weighted score
+# ---------------------------------------------------------
+
+swing_score = (
+    trend_score * 0.20
+    + momentum_score * 0.20
+    + volume_score * 0.15
+    + structure_score * 0.15
+    + support_score * 0.15
+    + higher_tf_score * 0.15
+)
+
+swing_score = round(
+    swing_score,
+    1
+)
+
+# ---------------------------------------------------------
+# Grade
+# ---------------------------------------------------------
+
+if swing_score >= 90:
+
+    grade = "A+"
+    status = "🔥 HIGH-QUALITY SETUP"
+
+elif swing_score >= 85:
+
+    grade = "A"
+    status = "🟢 STRONG SETUP"
+
+elif swing_score >= 80:
+
+    grade = "B+"
+    status = "🟢 GOOD SETUP"
+
+elif swing_score >= 75:
+
+    grade = "B"
+    status = "🟡 WATCH"
+
+else:
+
+    grade = "C"
+    status = "⚪ WAIT"
+
+# ---------------------------------------------------------
+# Direction
+# ---------------------------------------------------------
+
+bullish_components = (
+    trend_score
+    + momentum_score
+    + structure_score
+)
+
+bearish_components = (
+    (100 - trend_score)
+    + (100 - momentum_score)
+    + (100 - structure_score)
+)
+
+if bullish_components >= bearish_components:
+
+    direction = "🟢 BULLISH"
+    preferred_option = "CALL"
+
+else:
+
+    direction = "🔴 BEARISH"
+    preferred_option = "PUT"
+
+# ---------------------------------------------------------
+# Display
+# ---------------------------------------------------------
+
+col1, col2, col3, col4 = st.columns(4)
+
+col1.metric(
+    "Swing Score",
+    f"{swing_score}/100"
+)
+
+col2.metric(
+    "Grade",
+    grade
+)
+
+col3.metric(
+    "Direction",
+    direction
+)
+
+col4.metric(
+    "Option Bias",
+    preferred_option
+)
+
+st.success(
+    f"{status} — {symbol}"
+)
+
+# ---------------------------------------------------------
+# Score breakdown
+# ---------------------------------------------------------
+
+st.subheader(
+    "📊 Confluence Breakdown"
+)
+
+score_df = pd.DataFrame({
+
+    "Factor": [
+        "Trend",
+        "Momentum",
+        "Volume",
+        "Structure",
+        "Support / Resistance",
+        "Higher Timeframe"
+    ],
+
+    "Score": [
+        trend_score,
+        momentum_score,
+        volume_score,
+        structure_score,
+        support_score,
+        higher_tf_score
+    ],
+
+    "Weight": [
+        "20%",
+        "20%",
+        "15%",
+        "15%",
+        "15%",
+        "15%"
+    ]
+})
+
+st.dataframe(
+    score_df,
+    use_container_width=True,
+    hide_index=True
+)
+
+st.caption(
+    "Prototype scoring model — technical inputs will "
+    "later be calculated automatically from market data."
+)
