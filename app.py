@@ -702,3 +702,9 @@ st.caption(
     "Automated technical scoring • "
     "No trades are placed • Not financial advice"
 )
+
+st.caption(
+    "Swing Hunter V2 • Tradier sandbox data • "
+    "Automated technical scoring • "
+    "No trades are placed • Not financial advice"
+)
