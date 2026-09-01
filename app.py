@@ -2103,11 +2103,6 @@ else:
         "the Golden Trade Engine requirements."
     )
     
-else:
-
-    st.warning(
-        "No usable candidates were returned."
-    )
 
 else:
 
