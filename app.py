@@ -2103,7 +2103,6 @@ else:
         "the Golden Trade Engine requirements."
     )
     
-
 else:
 
     st.warning(
