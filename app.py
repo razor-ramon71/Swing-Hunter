@@ -277,7 +277,7 @@ st.caption(
 import requests
 
 st.divider()
-st.header("📡 Live Market Data Connection")
+st.header("📡 Tradier Market Data Connection")
 
 try:
     token = st.secrets["TRADIER_SANDBOX_TOKEN"]
@@ -289,27 +289,35 @@ try:
 
     response = requests.get(
         "https://sandbox.tradier.com/v1/markets/quotes",
-        params={"symbols": "AAPL"},
+        params={
+            "symbols": "AAPL",
+            "greeks": "false"
+        },
         headers=headers,
         timeout=10
     )
 
     if response.status_code == 200:
+
         data = response.json()
         quote = data["quotes"]["quote"]
 
         st.success("🟢 Tradier connection successful!")
 
         st.write(f"**Symbol:** {quote.get('symbol')}")
-        st.write(f"**Price:** ${quote.get('last')}")
+        st.write(f"**Last Price:** ${quote.get('last')}")
         st.write(f"**Volume:** {quote.get('volume')}")
 
     else:
+
         st.error(
-            f"🔴 Tradier returned error {response.status_code}"
+            f"🔴 Tradier returned HTTP {response.status_code}"
         )
 
+        st.code(response.text)
+
 except Exception as e:
-    st.error(
-        "🔴 Tradier connection could not be completed."
-    )
+
+    st.error("🔴 Tradier connection failed.")
+
+    st.code(str(e))
