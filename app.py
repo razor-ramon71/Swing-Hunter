@@ -2363,13 +2363,13 @@ st.write(
     f"{trade_option.upper()} "
     f"| **Delta:** {golden_trade['Delta']} "
     f"| **Spread:** {golden_trade['Spread %']}%"
- )
+  )
 
-st.write(
+  st.write(
     f"**Hughes 1%:** {golden_trade['Hughes 1%']} "
     f"| **Option Score:** {golden_score:.1f}/100"
-  )
- st.info(
+   )
+   st.info(
         "⚠️ This is a research prototype. "
         "Option pricing, Greeks, fills, slippage, "
         "and future price movement are uncertain. "
