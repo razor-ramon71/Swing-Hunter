@@ -1906,7 +1906,8 @@ for _, candidate in top_candidates.iterrows():
                 # ---------------------------------------------------------
 
 if QOD_MIN_RR <= estimated_rr <= QOD_MAX_RR:
- rr_score = 100
+    
+   rr_score = 100
 
 else:
 
