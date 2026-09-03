@@ -1383,7 +1383,29 @@ st.write(
     "The highest-ranked scanner candidates are now "
     "evaluated for 7–14 DTE options."
 )
+# =========================================================
+# 🥇 GOLDEN QOD SETTINGS
+# =========================================================
 
+GOLDEN_MIN_SCORE = 85
+GOLDEN_MIN_CONFLUENCES = 3
+
+QOD_MIN_DTE = 2
+QOD_MAX_DTE = 14
+
+QOD_MIN_DELTA = 0.35
+QOD_MAX_DELTA = 0.70
+
+QOD_MIN_OPTION_VOLUME = 10
+QOD_MIN_OPEN_INTEREST = 100
+
+QOD_MAX_SPREAD_PERCENT = 20
+
+QOD_MIN_RR = 1.25
+QOD_PREFERRED_RR = 1.50
+QOD_MAX_RR = 1.75
+
+QOD_ATR_STOP = 1.25
 # ---------------------------------------------------------
 # TRADE ENGINE SETTINGS
 # ---------------------------------------------------------
@@ -1878,30 +1900,28 @@ for _, candidate in top_candidates.iterrows():
 
                     estimated_rr = 0
 
-                # -----------------------------------------
-                # RISK / REWARD SCORE
-                # -----------------------------------------
+            
+# ---------------------------------------------------------
+# GOLDEN QOD RISK / REWARD
+# ---------------------------------------------------------
 
-                if estimated_rr >= 3:
+if (
+    QOD_MIN_RR
+    <= estimated_rr
+    <= QOD_MAX_RR
+):
 
-                    rr_score = 100
+    if estimated_rr >= QOD_PREFERRED_RR:
 
-                elif estimated_rr >= 2:
+        rr_score = 100
 
-                    rr_score = 85
+    else:
 
-                elif estimated_rr >= 1.5:
+        rr_score = 85
 
-                    rr_score = 70
+else:
 
-                elif estimated_rr >= 1:
-
-                    rr_score = 50
-
-                else:
-
-                    rr_score = 25
-
+    rr_score = 25
                 # -----------------------------------------
                 # FINAL OPTION SCORE
                 # -----------------------------------------
