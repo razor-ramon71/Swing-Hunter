@@ -2351,7 +2351,7 @@ st.warning(
         "the Golden Trade Engine requirements."
     )
 
-    st.info(
+ st.info(
         "Press 🔍 RUN GOLDEN SCAN to scan "
         "the starter stock/ETF universe."
     )
