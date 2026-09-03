@@ -2073,38 +2073,7 @@ for _, candidate in top_candidates.iterrows():
     except Exception:
         continue
 
-# =========================================================
-# DISPLAY GOLDEN TRADES
-# =========================================================
-
-if trade_results:
-
-    trade_df = pd.DataFrame(
-        trade_results
-    )
-
-    trade_df = (
-        trade_df
-        .sort_values(
-            "Option Score",
-            ascending=False
-        )
-        .reset_index(drop=True)
-    )
-
-    trade_df.index += 1
-    trade_df.index.name = "Rank"
-
-    st.subheader(
-        "🥇 Golden Trade Rankings"
-    )
-
-    st.dataframe(
-        trade_df,
-        use_container_width=True
-    )
-
-   # -----------------------------------------------------
+# -----------------------------------------------------
 # 🥇 GOLDEN QOD TRADE ALERT
 # -----------------------------------------------------
 
@@ -2363,12 +2332,12 @@ st.write(
     f"{trade_option.upper()} "
     f"| **Delta:** {golden_trade['Delta']} "
     f"| **Spread:** {golden_trade['Spread %']}%"
-  )
+)
 
- st.write(
+st.write(
     f"**Hughes 1%:** {golden_trade['Hughes 1%']} "
     f"| **Option Score:** {golden_score:.1f}/100"
-   )
+)
 
    st.info(
         "⚠️ This is a research prototype. "
