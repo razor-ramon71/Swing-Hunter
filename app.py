@@ -2346,7 +2346,7 @@ st.info(
         "Paper-test before risking real money."
   )
 
-   st.warning(
+st.warning(
         "No option contracts currently meet "
         "the Golden Trade Engine requirements."
     )
