@@ -2364,6 +2364,7 @@ st.write(
     f"| **Delta:** {golden_trade['Delta']} "
     f"| **Spread:** {golden_trade['Spread %']}%"
   )
+
  st.write(
     f"**Hughes 1%:** {golden_trade['Hughes 1%']} "
     f"| **Option Score:** {golden_score:.1f}/100"
