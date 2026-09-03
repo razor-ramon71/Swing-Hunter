@@ -1901,23 +1901,12 @@ for _, candidate in top_candidates.iterrows():
                     estimated_rr = 0
 
             
-# ---------------------------------------------------------
-# GOLDEN QOD RISK / REWARD
-# ---------------------------------------------------------
+                # ---------------------------------------------------------
+                # GOLDEN QOD RISK / REWARD
+                # ---------------------------------------------------------
 
-if (
-    QOD_MIN_RR
-    <= estimated_rr
-    <= QOD_MAX_RR
-):
-
-    if estimated_rr >= QOD_PREFERRED_RR:
-
-        rr_score = 100
-
-    else:
-
-        rr_score = 85
+if QOD_MIN_RR <= estimated_rr <= QOD_MAX_RR:
+ rr_score = 100
 
 else:
 
