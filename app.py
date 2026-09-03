@@ -2339,12 +2339,12 @@ st.write(
     f"| **Option Score:** {golden_score:.1f}/100"
 )
 
-   st.info(
+ st.info(
         "⚠️ This is a research prototype. "
         "Option pricing, Greeks, fills, slippage, "
         "and future price movement are uncertain. "
         "Paper-test before risking real money."
-    )
+  )
 
 else:
 
