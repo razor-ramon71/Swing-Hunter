@@ -2104,48 +2104,271 @@ if trade_results:
         use_container_width=True
     )
 
-    # -----------------------------------------------------
-    # TOP TRADE
-    # -----------------------------------------------------
+   # -----------------------------------------------------
+# 🥇 GOLDEN QOD TRADE ALERT
+# -----------------------------------------------------
 
-    golden_trade = trade_df.iloc[0]
+golden_trade = trade_df.iloc[0]
 
-    st.subheader(
-        "🏆 #1 Golden Trade Candidate"
+st.subheader(
+    "🥇 GOLDEN QOD — #1 TRADE CANDIDATE"
+)
+
+trade_symbol = golden_trade["Symbol"]
+trade_bias = golden_trade["Bias"]
+trade_option = golden_trade["Option"]
+trade_strike = float(golden_trade["Strike"])
+trade_dte = int(golden_trade["DTE"])
+trade_entry = float(golden_trade["Mid"])
+
+# ---------------------------------------------------------
+# STOCK PRICE / ATR
+# ---------------------------------------------------------
+
+try:
+
+    golden_quote_response = requests.get(
+        "https://sandbox.tradier.com/v1/markets/quotes",
+        params={
+            "symbols": trade_symbol,
+            "greeks": "false"
+        },
+        headers=headers,
+        timeout=10
     )
 
-    st.success(
-        f"{golden_trade['Symbol']} | "
-        f"{golden_trade['Bias']} | "
-        f"{golden_trade['Option']} | "
-        f"${golden_trade['Strike']:.2f} strike | "
-        f"{golden_trade['DTE']} DTE | "
-        f"Option Score "
-        f"{golden_trade['Option Score']}/100"
+    golden_quote_json = (
+        golden_quote_response.json()
     )
 
-    g1, g2, g3, g4 = st.columns(4)
-
-    g1.metric(
-        "Stock Score",
-        golden_trade["Stock Score"]
+    golden_quote = (
+        golden_quote_json
+        .get("quotes", {})
+        .get("quote")
     )
 
-    g2.metric(
-        "Option Score",
-        golden_trade["Option Score"]
+    if isinstance(golden_quote, list):
+        golden_quote = golden_quote[0]
+
+    golden_stock_price = float(
+        golden_quote.get("last")
     )
 
-    g3.metric(
-        "Risk / Reward",
-        f"{golden_trade['R/R']}:1"
+except Exception:
+
+    golden_stock_price = float(
+        trade_price
     )
 
-    g4.metric(
-        "Hughes 1%",
-        golden_trade["Hughes 1%"]
+# ---------------------------------------------------------
+# STOCK STOP / TARGET
+# ---------------------------------------------------------
+
+golden_atr = float(
+    atr
+)
+
+if trade_bias == "Bullish":
+
+    stock_stop = (
+        golden_stock_price
+        - golden_atr * QOD_ATR_STOP
     )
 
+    stock_risk = (
+        golden_stock_price
+        - stock_stop
+    )
+
+    stock_target = (
+        golden_stock_price
+        + stock_risk * QOD_PREFERRED_RR
+    )
+
+else:
+
+    stock_stop = (
+        golden_stock_price
+        + golden_atr * QOD_ATR_STOP
+    )
+
+    stock_risk = (
+        stock_stop
+        - golden_stock_price
+    )
+
+    stock_target = (
+        golden_stock_price
+        - stock_risk * QOD_PREFERRED_RR
+    )
+
+# ---------------------------------------------------------
+# OPTION STOP / TARGET
+# ---------------------------------------------------------
+
+trade_delta = golden_trade["Delta"]
+
+try:
+
+    trade_delta = abs(
+        float(trade_delta)
+    )
+
+except Exception:
+
+    trade_delta = 0.50
+
+option_risk = (
+    trade_entry
+    * 0.40
+)
+
+option_stop = max(
+    0.05,
+    trade_entry - option_risk
+)
+
+option_target = (
+    trade_entry
+    + (
+        trade_entry
+        - option_stop
+    )
+    * QOD_PREFERRED_RR
+)
+
+# ---------------------------------------------------------
+# GOLDEN QOD STATUS
+# ---------------------------------------------------------
+
+golden_score = float(
+    golden_trade["Option Score"]
+)
+
+if (
+    golden_score >= GOLDEN_MIN_SCORE
+    and golden_trade["R/R"] >= QOD_PREFERRED_RR
+):
+
+    golden_status = "🥇 GOLDEN QOD"
+
+else:
+
+    golden_status = "🟢 QUALIFIED QOD"
+
+# ---------------------------------------------------------
+# DISPLAY
+# ---------------------------------------------------------
+
+st.success(
+    f"{golden_status} — "
+    f"{trade_symbol} — "
+    f"{trade_bias}"
+)
+
+a1, a2, a3, a4 = st.columns(4)
+
+a1.metric(
+    "Stock Score",
+    f"{golden_trade['Stock Score']:.1f}"
+)
+
+a2.metric(
+    "Option Score",
+    f"{golden_score:.1f}"
+)
+
+a3.metric(
+    "Risk / Reward",
+    f"{golden_trade['R/R']:.2f}R"
+)
+
+a4.metric(
+    "Delta",
+    str(golden_trade["Delta"])
+)
+
+# ---------------------------------------------------------
+# QOD-STYLE ALERT
+# ---------------------------------------------------------
+
+month_name = datetime.strptime(
+    str(date.today()),
+    "%Y-%m-%d"
+).strftime("%B")
+
+qod_alert = f"""
+NEW TRADE:
+
+Buy-to-Open the
+({trade_symbol}) {month_name} {trade_dte} DTE
+{trade_strike:g} {trade_option.title()}
+at {trade_entry:.2f} or less.
+
+Apply a stop of {option_stop:.2f}
+Target to {option_target:.2f} or more in Full position.
+"""
+
+st.subheader(
+    "📣 QOD-STYLE TRADE ALERT"
+)
+
+st.code(
+    qod_alert.strip(),
+    language=None
+)
+
+# ---------------------------------------------------------
+# TRADE PLAN
+# ---------------------------------------------------------
+
+st.subheader(
+    "🎯 Golden QOD Trade Plan"
+)
+
+p1, p2, p3, p4 = st.columns(4)
+
+p1.metric(
+    "Entry",
+    f"${trade_entry:.2f}"
+)
+
+p2.metric(
+    "Stop",
+    f"${option_stop:.2f}"
+)
+
+p3.metric(
+    "Target",
+    f"${option_target:.2f}"
+)
+
+p4.metric(
+    "DTE",
+    f"{trade_dte}"
+)
+
+st.write(
+    f"**Underlying:** {trade_symbol} "
+    f"at ${golden_stock_price:.2f}"
+)
+
+st.write(
+    f"**Stock Stop:** ${stock_stop:.2f} "
+    f"| **Stock Target:** ${stock_target:.2f}"
+)
+
+st.write(
+    f"**Option:** {trade_strike:g} "
+    f"{trade_option.upper()} "
+    f"| **Delta:** {golden_trade['Delta']} "
+    f"| **Spread:** {golden_trade['Spread %']}%"
+)
+
+st.write(
+    f"**Hughes 1%:** {golden_trade['Hughes 1%']} "
+    f"| **Option Score:** {golden_score:.1f}/100"
+)
     st.info(
         "⚠️ This is a research prototype. "
         "Option pricing, Greeks, fills, slippage, "
