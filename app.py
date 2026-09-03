@@ -2346,8 +2346,6 @@ st.info(
         "Paper-test before risking real money."
   )
 
-else:
-
     st.warning(
         "No option contracts currently meet "
         "the Golden Trade Engine requirements."
